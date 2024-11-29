@@ -13,7 +13,7 @@ def parse_arg():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dim", nargs='?', default='1,32,32,3', type=str, 
                             help='Input NHWC dimension, e.g., --input_dim 1,32,32,3')
-    parser.add_argument("--port", nargs='?', default='/dev/ttyUSB1', type=str, 
+    parser.add_argument("--port", nargs='?', default='/dev/ttyUSB3', type=str, 
                             help='Device port, e.g, --port /dev/ttyUSB1.')
     parser.add_argument("-p", nargs='?', dest='port', type=str,
                             help='Device port, e.g, -p /dev/ttyUSB1.')
