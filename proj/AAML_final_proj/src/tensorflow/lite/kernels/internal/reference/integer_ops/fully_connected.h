@@ -128,11 +128,11 @@ inline void FullyConnected(
     int8_t* output_data) {
   //! modified for FINAL
   printf("check if using FullyConnected kernels\n");
-  const int32_t input_offset = params.input_offset;
-  const int32_t filter_offset = params.weights_offset;
-  const int32_t output_offset = params.output_offset;
-  const int32_t output_multiplier = params.output_multiplier;
-  const int output_shift = params.output_shift;
+  // const int32_t input_offset = params.input_offset;
+  // const int32_t filter_offset = params.weights_offset;
+  // const int32_t output_offset = params.output_offset;
+  // const int32_t output_multiplier = params.output_multiplier;
+  // const int output_shift = params.output_shift;
   // const int32_t output_activation_min = params.quantized_activation_min;
   // const int32_t output_activation_max = params.quantized_activation_max;
   // TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
@@ -172,7 +172,7 @@ inline void FullyConnected(
   //        output_activation_min, output_activation_max);
 
   //! modified for FINAL
-  cfu_op(0, 0, input_offset, filter_offset);  // set input,filter offset
+  cfu_op(0, 0, 128, 0);  // set input,filter offset
 
   // for (int b = 0; b < batches; ++b) {
   // for (int b = 0; b < 1; ++b) {
@@ -206,8 +206,8 @@ inline void FullyConnected(
     if (bias_data) {
       acc += bias_data[out_c];
     }
-    acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
-    acc += output_offset;
+    acc = MultiplyByQuantizedMultiplier(acc, 1552512742, -5);
+    acc += 24;
     // acc = std::max(acc, output_activation_min);
     // acc = std::min(acc, output_activation_max);
     acc = std::max(acc, (int32_t)-128);

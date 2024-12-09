@@ -57,7 +57,7 @@ inline void ConvPerChannel(
   // TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
   // TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
   // const int batches = MatchingDim(input_shape, 0, output_shape, 0);
-  const int input_depth = input_shape.Dims(3);
+  // const int input_depth = input_shape.Dims(3);
   const int output_depth = MatchingDim(filter_shape, 0, output_shape, 3);
   // if (bias_data) {
   //   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
@@ -69,9 +69,9 @@ inline void ConvPerChannel(
   const int filter_height = filter_shape.Dims(1);
   const int filter_width = filter_shape.Dims(2);
   const int filter_input_depth = filter_shape.Dims(3);
-  const int groups = input_depth / filter_input_depth;
+  // const int groups = input_depth / filter_input_depth;
   // TFLITE_DCHECK_EQ(input_depth % filter_input_depth, 0);
-  const int filters_per_group = output_depth / groups;
+  // const int filters_per_group = output_depth / groups;
   // const int filters_per_group = output_depth;
   const int output_height = output_shape.Dims(1);
   const int output_width = output_shape.Dims(2);
@@ -113,7 +113,7 @@ inline void ConvPerChannel(
       const int in_x_origin = (out_x * stride_width) - pad_width;
 
       for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
-        auto group = out_channel / filters_per_group;
+        // auto group = out_channel / filters_per_group;
         // int32_t acc = 0;
         int32_t acc = cfu_op(1, 0, 0, 0);
 
@@ -140,18 +140,32 @@ inline void ConvPerChannel(
               int remaining_channels = filter_input_depth - in_channel;
 
               // Read input data
+              // if (remaining_channels >= 4) {
+              //   input_val =
+              //       *((uint32_t*)(input_data +
+              //                     Offset(input_shape, 0, in_y, in_x,
+              //                            in_channel +
+              //                                group * filter_input_depth)));
+              // } else {
+              //   for (int i = 0; i < remaining_channels; ++i) {
+              //     input_val |=
+              //         ((uint32_t)(uint8_t)input_data[Offset(
+              //             input_shape, 0, in_y, in_x,
+              //             in_channel + i + group * filter_input_depth)])
+              //         << (8 * i);
+              //   }
+              // }
               if (remaining_channels >= 4) {
                 input_val =
                     *((uint32_t*)(input_data +
                                   Offset(input_shape, 0, in_y, in_x,
-                                         in_channel +
-                                             group * filter_input_depth)));
+                                         in_channel)));
               } else {
                 for (int i = 0; i < remaining_channels; ++i) {
                   input_val |=
                       ((uint32_t)(uint8_t)input_data[Offset(
                           input_shape, 0, in_y, in_x,
-                          in_channel + i + group * filter_input_depth)])
+                          in_channel + i )])
                       << (8 * i);
                 }
               }
