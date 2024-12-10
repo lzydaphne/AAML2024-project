@@ -1,61 +1,53 @@
-// // Copyright 2021 The CFU-Playground Authors
-// //
-// // Licensed under the Apache License, Version 2.0 (the "License");
-// // you may not use this file except in compliance with the License.
-// // You may obtain a copy of the License at
-// //
-// //      http://www.apache.org/licenses/LICENSE-2.0
-// //
-// // Unless required by applicable law or agreed to in writing, software
-// // distributed under the License is distributed on an "AS IS" BASIS,
-// // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// // See the License for the specific language governing permissions and
-// // limitations under the License.
+// Copyright 2021 The CFU-Playground Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "TPU.v"
+`include "global_buffer_bram.v"
 
 
-
-// // module Cfu (
-// //   input               cmd_valid,
-// //   output              cmd_ready,
-// //   input      [9:0]    cmd_payload_function_id,
-// //   input      [31:0]   cmd_payload_inputs_0,
-// //   input      [31:0]   cmd_payload_inputs_1,
-// //   output              rsp_valid,
-// //   input               rsp_ready,
-// //   output     [31:0]   rsp_payload_outputs_0,
-// //   input               reset,
-// //   input               clk
-// // );
-
-// //   // Trivial handshaking for a combinational CFU
-// //   assign rsp_valid = cmd_valid;
-// //   assign cmd_ready = rsp_ready;
-
-// //   //
-// //   // select output -- note that we're not fully decoding the 3 function_id bits
-// //   //
-// //   assign rsp_payload_outputs_0 = cmd_payload_function_id[0] ? 
-// //                                            cmd_payload_inputs_1 :
-// //                                            cmd_payload_inputs_0 ;
-
-
-// // endmodule
-
-//! lab2 custom cfu
 module Cfu (
   input               cmd_valid,
   output              cmd_ready,
-  // func7: cmd_payload_function_id[9:3], func3: cmd_payload_function_id[2:0]
-  input      [9:0]    cmd_payload_function_id, 
+  input      [9:0]    cmd_payload_function_id,
   input      [31:0]   cmd_payload_inputs_0,
   input      [31:0]   cmd_payload_inputs_1,
-  output reg          rsp_valid,
+  output              rsp_valid,
   input               rsp_ready,
-  output reg [31:0]   rsp_payload_outputs_0,
+  output     [31:0]   rsp_payload_outputs_0,
   input               reset,
   input               clk
 );
-  // localparam InputOffset = $signed(9'd128);
+
+  // localparam [9:0] load_A = {7'd1, 3'd0};
+  // localparam [9:0] load_B = {7'd2, 3'd0};
+  // localparam [9:0] read_C0 = {7'd3, 3'd0};
+  // localparam [9:0] run_it = {7'd4, 3'd0};
+  // localparam [9:0] st_arg = {7'd5, 3'd0};
+
+  // localparam [9:0] get_result = {7'd6, 3'd0};
+  // localparam [9:0] read_C1 = {7'd7, 3'd0};
+  // localparam [9:0] read_C2 = {7'd8, 3'd0};
+  // localparam [9:0] read_C3 = {7'd9, 3'd0};
+
+  // localparam [9:0] read_A = {7'd12, 3'd0};
+  // localparam [9:0] read_B = {7'd13, 3'd0};
+
+
+  // Trivial handshaking for a combinational CFU
+  assign rsp_valid = cmd_valid;
+  assign cmd_ready = rsp_ready;
+
   reg signed [31:0] InputOffset; //state
   reg signed [31:0] FilterOffset; //state
   // reg signed [31:0] acc; // state
@@ -63,6 +55,7 @@ module Cfu (
 
   // SIMD multiply step:
   wire signed [15:0] prod_0, prod_1, prod_2, prod_3;
+  reg  signed [15:0] prod_0_reg, prod_1_reg, prod_2_reg, prod_3_reg;
   assign prod_0 =  ($signed(cmd_payload_inputs_0[7 : 0]) + InputOffset)
                   * ($signed(cmd_payload_inputs_1[7 : 0] ) + FilterOffset) ;
   assign prod_1 =  ($signed(cmd_payload_inputs_0[15: 8]) + InputOffset)
@@ -73,414 +66,378 @@ module Cfu (
                   * ($signed(cmd_payload_inputs_1[31:24]) + FilterOffset);
 
   wire signed [31:0] sum_prods;
-  assign sum_prods = prod_0 + prod_1 + prod_2 + prod_3;
+  assign sum_prods = prod_0_reg + prod_1_reg + prod_2_reg + prod_3_reg;
 
-  // Only not ready for a command when we have a response.
-  assign cmd_ready = ~rsp_valid;
-  //* form: cfu_op(func3, func7, in0, in1);
+
+  // wire calculating= (cal) 1:0;
+  //
+  // select output -- note that we're not fully decoding the 3 function_id bits
+  //
+  assign rsp_payload_outputs_0 = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0})) ? A_data_out :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? B_data_out :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd3, 3'd0})) ? C_data_out[31:0] :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd7, 3'd0})) ? C_data_out[63:32] :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd8, 3'd0})) ? C_data_out[95:64] :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd9, 3'd0})) ? C_data_out[127:96] :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd6, 3'd0})) ? busy :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd11, 3'd0}))? cals  :   
+                                 (cmd_valid && (cmd_payload_function_id == {7'd12, 3'd0}))? srdhm_result :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd1})) ? 32'd0 :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd4, 3'd1})) ? sum_prods :
+                                 (cmd_valid && (cmd_payload_function_id == {7'd14, 3'd0}))? calr  :   
+                                 (cmd_valid && (cmd_payload_function_id == {7'd15, 3'd0}))? rdbpot_result :
+                                                                                        2'd3 ;
+
+
+
+  wire [11:0]    A_index        = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0} )) ? cmd_payload_inputs_0[11:0]
+                                                                                                           : A_index_TPU;        
+  wire [31:0]    A_data_in      = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0})) ? cmd_payload_inputs_1 : 32'd0;    
+  wire           A_wr_en        = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0})) ? 1 : 0;     
+  wire [31:0]    A_data_out; 
+
+  wire [11:0]     B_index       = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? cmd_payload_inputs_0[11:0]
+                                                                                                           : B_index_TPU;
+  wire [31:0]     B_data_in     = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? cmd_payload_inputs_1 : 32'd0;  
+  wire            B_wr_en       = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? 1 : 0;      
+  wire [31:0]    B_data_out;  
+
+  wire [11:0]     C_index       = (cmd_valid &&  ( (cmd_payload_function_id == {7'd3, 3'd0}) 
+                                                || (cmd_payload_function_id == {7'd7, 3'd0})
+                                                || (cmd_payload_function_id == {7'd8, 3'd0})
+                                                || (cmd_payload_function_id == {7'd9, 3'd0}))) ? cmd_payload_inputs_0[11:0]
+                                                                                     : C_index_TPU;      
+  wire [127:0]   C_data_in      = C_data_in_TPU;  
+  wire           C_wr_en        = C_wr_en_TPU;   
+  wire [127:0]   C_data_out; 
+
+
+  reg [7:0]      K;
+  reg [7:0]      M;
+  reg [7:0]      N;
+
+  reg            in_valid;
+  reg            calculating;
+  reg [31:0]     offset;
+
+  reg cals, calr;
+
   always @(posedge clk) begin
-    if (reset) begin
-      rsp_payload_outputs_0 <= 32'b0;
-      rsp_valid <= 1'b0;
-
-    end else if (rsp_valid) begin
-      // Waiting to hand off response to CPU.
-      rsp_valid <= ~rsp_ready;
-    
-    end else if (cmd_valid) begin
-      //* case1
-      rsp_valid <= 1'b1;
-      // Accumulate step:
-      if(cmd_payload_function_id[2:0] == 3'd0 ) begin// input offset
-        
-        InputOffset <= cmd_payload_inputs_0;
-        FilterOffset <= cmd_payload_inputs_1;
-
-      end
-      
-      else if ( cmd_payload_function_id[2:0] == 3'd1) begin // reset
-
-        rsp_payload_outputs_0 <= 32'b0;
-
-      end  else if ( cmd_payload_function_id[2:0] == 3'd2 ) begin // accumulate
-        rsp_payload_outputs_0 <= sum_prods;
-
-      end 
-      // else if ( cmd_payload_function_id[2:0] == 3'd3 ) begin // filter offset
-      //   // rsp_payload_outputs_0 <= sum_prods;
-      //   // FilterOffset <= 32'b0;
-      // end
-      
-      // rsp_payload_outputs_0 <= |cmd_payload_function_id[9:3]
-      //     ? 32'b0
-      //     : rsp_payload_outputs_0 + sum_prods;
+    if (cmd_valid && (cmd_payload_function_id == {7'd5, 3'd0})) begin
+        K           <= cmd_payload_inputs_0[7:0];
+        M           <= cmd_payload_inputs_1[7:0];
+        N           <= cmd_payload_inputs_1[15:8];
     end
   end
+
+
+  always @(posedge clk) begin
+    if (cmd_valid && (cmd_payload_function_id == {7'd4, 3'd0})) begin
+        in_valid       <= 1'b1;
+        offset         <= cmd_payload_inputs_1;
+    end
+    else begin
+        in_valid       <= 1'b0;
+    end
+  end
+
+  // reg prod_val;
+
+  always @(posedge clk)begin
+    if(cmd_valid && (cmd_payload_function_id == {7'd0, 3'd1}))begin
+      InputOffset <= cmd_payload_inputs_0;
+      FilterOffset <= cmd_payload_inputs_1;
+      // prod_val <= 1;
+    end
+    else if(cmd_valid && (cmd_payload_function_id == {7'd2, 3'd1}))begin
+      prod_0_reg <= prod_0;
+      prod_1_reg <= prod_1;
+      prod_2_reg <= prod_2;
+      prod_3_reg <= prod_3;
+      // sum_prods <= prod_0 + prod_1 + prod_2 + prod_3;
+      // prod_val <= 0;
+    end
+  end
+
+  reg [31:0] srdhm_input_a;
+  reg [31:0] srdhm_input_b;
+  wire [31:0] srdhm_result;
+  reg srdhm_input_valid;
+  wire srdhm_output_valid;
+
+  always @(posedge clk)begin
+    if(cmd_valid && cmd_payload_function_id == {7'd10, 3'd0})begin
+      cals <= 1;
+      srdhm_input_a <= cmd_payload_inputs_0;
+      srdhm_input_b <= cmd_payload_inputs_1;
+      srdhm_input_valid <= 1;
+    end
+    else if(srdhm_input_valid)begin
+      srdhm_input_valid <=0;
+    end
+    else if(srdhm_output_valid)begin
+      cals <= 0;
+    end
+  end
+
+  SRDHM srdhm (
+        .clk(clk),
+        .rst(reset),
+        .a(srdhm_input_a),
+        .b(srdhm_input_b),
+        .input_valid(srdhm_input_valid),
+        .srdhm_x(srdhm_result),
+        .output_valid(srdhm_output_valid)
+    );
+
+  reg [31:0] rdbpot_input_a;
+  reg [31:0] rdbpot_input_b;
+  wire [31:0] rdbpot_result;
+  reg rdbpot_input_valid;
+  wire rdbpot_output_valid;
+
+  always @(posedge clk)begin
+    if(cmd_valid && cmd_payload_function_id == {7'd13, 3'd0})begin
+      calr <= 1;
+      rdbpot_input_a <= cmd_payload_inputs_0;
+      rdbpot_input_b <= cmd_payload_inputs_1;
+      rdbpot_input_valid <= 1;
+    end
+    else if(rdbpot_input_valid)begin
+      rdbpot_input_valid <=0;
+    end
+    else if(rdbpot_output_valid)begin
+      calr <= 0;
+    end
+  end
+
+  RDBPOT rdbpot (
+        .clk(clk),
+        .rst(reset),
+        .x(rdbpot_input_a),
+        .exp(rdbpot_input_b),
+        .input_valid(rdbpot_input_valid),
+        .rdbpot_x(rdbpot_result),
+        .output_valid(rdbpot_output_valid)
+    );
+
+
+  wire               busy;
+
+  wire [31:0]        A_data_out_TPU = A_data_out;
+  wire [31:0]        B_data_out_TPU = B_data_out;
+  wire [127:0]       C_data_out_TPU = C_data_out;
+
+//   TPU My_TPU(
+//     .clk            (clk),     
+//     .rst_n          (~reset),     
+//     .in_valid       (in_valid),         
+//     .K              (K), 
+//     .M              (M), 
+//     .N              (N), 
+//     .busy           (busy),     
+//     .A_wr_en        (),         
+//     .A_index        (A_index_TPU),         
+//     .A_data_in      (),         
+//     .A_data_out     (A_data_out_TPU),         
+//     .B_wr_en        (),         
+//     .B_index        (B_index_TPU),         
+//     .B_data_in      (),         
+//     .B_data_out     (B_data_out_TPU),         
+//     .C_wr_en        (C_wr_en_TPU),         
+//     .C_index        (C_index_TPU),         
+//     .C_data_in      (C_data_in_TPU),         
+//     .C_data_out     (C_data_out_TPU)         
+//   );
+
+    wire [11:0]    A_index_TPU; 
+    wire [11:0]    B_index_TPU; 
+    wire [11:0]    C_index_TPU; 
+
+    wire [127:0]    C_data_in_TPU; 
+
+  TPU My_TPU(
+    .clk            (clk),     
+    .rst_n          (~reset),   
+    .input_offset   (offset),     
+    .in_valid       (in_valid),         
+    .K              (K), 
+    .M              (M), 
+    .N              (N), 
+    .busy           (busy),     
+    .A_wr_en        (),         
+    .A_index        (A_index_TPU),         
+    .A_data_in      (),         
+    .A_data_out     (A_data_out_TPU),         
+    .B_wr_en        (),         
+    .B_index        (B_index_TPU),         
+    .B_data_in      (),         
+    .B_data_out     (B_data_out_TPU),         
+    .C_wr_en        (C_wr_en_TPU),         
+    .C_index        (C_index_TPU),         
+    .C_data_in      (C_data_in_TPU),         
+    .C_data_out     (C_data_out_TPU)     
+);
+
+
+  global_buffer_bram #(
+      .ADDR_BITS(12),
+      .DATA_BITS(32)
+  )
+  gbuff_A(
+      .clk(clk),
+      .rst_n(reset),
+      .ram_en(1'b1),
+      .wr_en(A_wr_en),
+      .index(A_index),
+      .data_in(A_data_in),
+      .data_out(A_data_out)
+  );
+
+  global_buffer_bram #(
+      .ADDR_BITS(12),
+      .DATA_BITS(32)
+  ) gbuff_B(
+      .clk(clk),
+      .rst_n(reset),
+      .ram_en(1'b1),
+      .wr_en(B_wr_en),
+      .index(B_index),
+      .data_in(B_data_in),
+      .data_out(B_data_out)
+  );
+
+
+  global_buffer_bram #(
+      .ADDR_BITS(12),
+      .DATA_BITS(128)
+  ) gbuff_C(
+      .clk(clk),
+      .rst_n(reset),
+      .ram_en(1'b1),
+      .wr_en(C_wr_en),
+      .index(C_index),
+      .data_in(C_data_in),
+      .data_out(C_data_out)
+  );
+
+
 endmodule
 
+module SRDHM(
+  input wire clk,
+  input wire rst,
+  input wire [31:0] a,
+  input wire [31:0] b,
+  input wire input_valid,
+  output reg [31:0] srdhm_x,
+  output reg output_valid
+);
 
-// module Cfu (
-//   input               cmd_valid,
-//   output              cmd_ready,
-//   input      [9:0]    cmd_payload_function_id,
-//   input      [31:0]   cmd_payload_inputs_0,
-//   input      [31:0]   cmd_payload_inputs_1,
-//   output reg          rsp_valid,
-//   input               rsp_ready,
-//   output reg [31:0]   rsp_payload_outputs_0,
-//   input               reset,
-//   input               clk
-// );
+parameter IDLE = 3'd0; 
+parameter CAL1 = 3'd1;   
+parameter CAL2 = 3'd2;
+parameter CAL3 = 3'd3;
+parameter DONE = 3'd4;
 
-//       // func7: cmd_payload_function_id[9:3], func3: cmd_payload_function_id[2:0]
-//   /* SPEC: funct3 = 0, For write A buffer; funct3 = 1, For write B buffer;
-//            funct3 = 2, Start compute ; funct3 = 3, Get results
-//            funct3 = 4, For debug A buffer; funct4 = 5, For debug B buffer
-//   */
-//   reg signed [7:0] data_in_0, data_in_1;
-//   reg [1:0] input_offset_enable;
-//   reg store_gbuff_A_enable, store_gbuff_B_enable; //C is triggered by TPU, (check)
-//   reg store_done_flag;
+reg [2:0] state;
+reg [63:0] ab_64, ab_64_nudge;
+reg [31:0] nudge;
+wire  overflow = ((a == 32'h80000000) && (b == 32'h80000000));
+wire [63:0] ab_64_nudge_neg = ~ab_64_nudge + 1'b1;
 
-//   /* For TPU */ 
-//   reg start_compute_flag;  // Map to busy signal
-//   reg comupte_done_flag;
-//   reg [8:0] K_in;
-//   reg signed [31:0] input_offset;
-//   reg [20:0] cycle_cnt;
-//   reg [15:0] A_index, B_index, C_index;  // for computation
-//   reg [15:0] A_index_dbg, B_index_dbg;  // for debug
-//   reg signed [31:0] C_Matrix[0:15];
+always @(posedge clk)begin
+  if(rst)begin
+    state <= IDLE;
+    output_valid <= 0;
+    srdhm_x <= 0;
+  end
+  else begin
+    case(state)
+        IDLE: begin
+          output_valid =0;
+          // srdhm_x <= 0;
+          if(input_valid)begin
+            state <= CAL1;
+          end
+        end
+        CAL1: begin
+          ab_64 <= $signed(a)*$signed(b);
+          state <= CAL2;
+        end
+        CAL2: begin
+          nudge <= (ab_64[63]) ? 64'hc0000001 : 64'h40000000;
+          state <= CAL3;
+        end
+        CAL3: begin
+          ab_64_nudge <= ab_64 + nudge;
+          state <= DONE;
+        end
+        DONE: begin
+          state <= IDLE;
+          output_valid <= 1;
+          srdhm_x <= (overflow) ? 32'h7fffffff : //ab_64_nudge[62:31];
+                    (ab_64_nudge[63]) ? ~(ab_64_nudge_neg[62:31]) -1'b1 : ab_64_nudge[62:31]; //{ab_64_nudge[62:32], 1'b0}
+        end
+    endcase
+  end
+end
 
-//   integer i;
+endmodule
 
-  
+module RDBPOT(
+  input wire clk,
+  input wire rst,
+  input wire [31:0] x,
+  input wire [31:0] exp,
+  input wire input_valid,
+  output reg [31:0] rdbpot_x,
+  output reg output_valid
+);
 
-//   /* Global Buffer start */
+parameter IDLE = 3'd0; 
+parameter CAL1 = 3'd1;   
+parameter CAL2 = 3'd2;
+parameter CAL3 = 3'd3;
+parameter DONE = 3'd4;
 
-//   // Size limits to 1000000 bits
-//   // Global buffer A for Input matrix, ADDR_BITS=16, DATA_BITS=32
-//   parameter ADDR_BITS_A = 11;  //Up to 14
-//   parameter DATA_BITS_A = 8;
-//   parameter DEPTH_A = 1200;
-//   reg signed [DATA_BITS_A-1:0] gbuff_A [DEPTH_A-1:0];  //2048 is too large (check), 1200 is enough
-//   reg gbuff_offset_map [DEPTH_A-1:0];  //check
-//   reg [ADDR_BITS_A-1:0] index_A;
-//   always @ (posedge clk) begin
-//     if(reset) begin
-//       index_A <= 'd0;
-//       // for(i = 0; i < DEPTH_A; i = i+1)
-//       //   gbuff_A[i] <= 'd0;      
-//     end
-//     else begin
-//       if(store_gbuff_A_enable) begin  // (check)
-//         gbuff_A[index_A]   <= data_in_0;
-//         gbuff_A[index_A+1] <= data_in_1;
+reg [2:0] state;
+// reg [63:0] ab_64, ab_64_nudge;
+reg [31:0] mask, remainder, threshold;
+// wire  overflow = ((a == 32'h80000000) && (b == 32'h80000000));
+// wire [63:0] ab_64_nudge_neg = ~ab_64_nudge + 1'b1;
 
-//         if(input_offset_enable == 'd0) begin
-//           gbuff_offset_map[index_A]   <= 1'b0;
-//           gbuff_offset_map[index_A+1] <= 1'b0;
-//         end
-//         else if(input_offset_enable == 'd1) begin
-//           gbuff_offset_map[index_A]   <= 1'b1;
-//           gbuff_offset_map[index_A+1] <= 1'b0;
-//         end
-//         else if(input_offset_enable == 'd2) begin
-//           gbuff_offset_map[index_A]   <= 1'b0;
-//           gbuff_offset_map[index_A+1] <= 1'b1;
-//         end
-//         else if(input_offset_enable == 'd3) begin
-//           gbuff_offset_map[index_A]   <= 1'b1;
-//           gbuff_offset_map[index_A+1] <= 1'b1;
-//         end
-          
-//         index_A <= index_A + 2;
-//       end
-//       else if(comupte_done_flag) begin
-//         index_A <= 'd0;
-//       end
-//     end
-//   end
+always @(posedge clk)begin
+  if(rst)begin
+    state <= IDLE;
+    output_valid <= 0;
+    rdbpot_x<= 0;
+  end
+  else begin
+    case(state)
+        IDLE: begin
+          output_valid =0;
+          // srdhm_x <= 0;
+          if(input_valid)begin
+            state <= CAL1;
+          end
+        end
+        CAL1: begin
+          mask <= (exp << 1) - 1'b1;
+          state <= CAL2;
+        end
+        CAL2: begin
+          remainder <= x & mask;
+          threshold <= ($signed(mask) >>1) + x[31];
+          state <= DONE;
+        end
+        DONE: begin
+          state <= IDLE;
+          output_valid <= 1;
+          rdbpot_x <= ($signed(x) >> exp) + ($signed(remainder) > $signed(threshold));
+        end
+    endcase
+  end
+end
 
-//   // Global buffer B for Filter matrix, ADDR_BITS=16, DATA_BITS=32
-//   parameter ADDR_BITS_B = 11; //Up to 14
-//   parameter DATA_BITS_B = 8;
-//   parameter DEPTH_B = 1200;  // 2048 is too large (check)
-//   reg signed [DATA_BITS_B-1:0] gbuff_B [DEPTH_B-1:0];
-//   reg [ADDR_BITS_B-1:0] index_B;
-//   always @ (posedge clk) begin
-//     if(reset) begin
-//       index_B <= 'd0;
-//       // for(i = 0; i < DEPTH_B; i = i+1) begin
-//       //   gbuff_B[i] <= 'd0;          
-//       // end
-//     end
-//     else begin
-//       if(store_gbuff_B_enable) begin // (check)
-//         gbuff_B[index_B]   <= data_in_0;
-//         gbuff_B[index_B+1] <= data_in_1;
-//         index_B <= index_B + 2;
-//       end
-//       else if(comupte_done_flag) begin  // (May Need modify)
-//         index_B <= 'd0;
-//       end
-//     end
-//   end
-
-//   /* Global Buffer end */
-
-
-//   /* Handshake control start */
-//   assign cmd_ready = 1;
-//   always @(posedge clk) begin
-//     if (reset) begin  //reset is high active (check)
-//       //cmd input
-//       store_gbuff_A_enable <= 0;
-//       store_gbuff_B_enable <= 0;
-//       data_in_0 <= 'd0;
-//       data_in_1 <= 'd0;
-//       // Compute signal
-//       K_in <= 'd0;
-//       //response
-//       rsp_payload_outputs_0 <= 32'd0;
-//       rsp_valid <= 1'b0;
-//       C_index <= 'd0;
-//       // debug
-//       A_index_dbg <= 'd0;
-//       B_index_dbg <= 'd0;
-//     end else if (cmd_valid) begin
-//       if (cmd_payload_function_id[2:0] == 'd0) begin
-//         store_gbuff_A_enable <= 1;
-//         input_offset_enable <= cmd_payload_function_id[4:3];
-//         data_in_0 <= $signed(cmd_payload_inputs_0[7:0]);
-//         data_in_1 <= $signed(cmd_payload_inputs_1[7:0]);
-//       end
-//       else if (cmd_payload_function_id[2:0] == 'd1) begin
-//         store_gbuff_B_enable <= 1;
-//         data_in_0 <= $signed(cmd_payload_inputs_0[7:0]);
-//         data_in_1 <= $signed(cmd_payload_inputs_1[7:0]);
-//       end
-//       else if (cmd_payload_function_id[2:0] == 'd2) begin  // Start compute
-//         // start_compute_flag <= 1;
-//         K_in <= cmd_payload_inputs_0[8:0];
-//         input_offset <= cmd_payload_inputs_1;
-//       end
-//       else if (cmd_payload_function_id[2:0] == 'd3) begin
-//         rsp_valid <= 'd1;
-//         rsp_payload_outputs_0 <= C_Matrix[C_index];
-//         C_index <= C_index + 'd1;
-//       end
-//       else if (cmd_payload_function_id[2:0] == 'd4) begin
-//         rsp_valid <= 'd1;
-//         rsp_payload_outputs_0 <= {{24{gbuff_A[7]}}, gbuff_A[A_index_dbg]};  // sign extension
-//         A_index_dbg <= A_index_dbg + 'd1;
-//       end
-//       else if (cmd_payload_function_id[2:0] == 'd5) begin
-//         rsp_valid <= 'd1;
-//         rsp_payload_outputs_0 <= {{24{gbuff_B[7]}}, gbuff_B[B_index_dbg]};
-//         B_index_dbg <= B_index_dbg + 'd1;
-//       end
-//     end else if (store_done_flag) begin // (check), need a complete signal
-//       rsp_valid <= 1;
-//       store_gbuff_A_enable <= 'd0;
-//       store_gbuff_B_enable <= 'd0;
-//       rsp_payload_outputs_0 <= 'd0;
-//       C_index <= 'd0;
-//     end else if (comupte_done_flag) begin
-//       rsp_valid <= 1;
-//       A_index_dbg <= 'd0;
-//       B_index_dbg <= 'd0;
-//     end
-//     else begin
-//       rsp_valid <= 'd0;
-//       rsp_payload_outputs_0 <= 'd0;
-//       // Write done control
-//     end
-//   end
-
-//   always @(posedge clk) begin
-//     if (reset)
-//       store_done_flag <= 'd0;
-//     else if (cmd_valid && (cmd_payload_function_id[2:0] == 'd0 || cmd_payload_function_id[2:0] == 'd1))
-//       store_done_flag <= 'd1;
-//     else 
-//       store_done_flag <= 'd0;
-//   end
-//   /* Handshake control end */
-
-
-//   /* TPU start */
-//   always @(posedge clk) begin //start_compte_flag map to busy signal
-//     if (reset)
-//       start_compute_flag <= 'd0;
-//     else if (cmd_valid && cmd_payload_function_id[2:0] == 'd2)
-//       start_compute_flag <= 'd1;
-//     else if (cycle_cnt == (K_in) + 1 + 1) //(check)
-//       start_compute_flag <= 'd0;
-//   end
-
-//   always @(posedge clk) begin
-//     if(reset)
-//       cycle_cnt <= 'd0;
-//     else if(start_compute_flag)
-//       cycle_cnt <= cycle_cnt + 'd1;
-//     else 
-//       cycle_cnt <= 'd0;
-//   end
-
-//   always @(posedge clk) begin
-//     if (reset)
-//       comupte_done_flag <= 'd0;
-//     else if (cycle_cnt == (K_in) + 1 + 1) //(check) cycle +1 +1
-//       comupte_done_flag <= 'd1;
-//     else 
-//       comupte_done_flag <= 'd0;
-//   end
-
-//   /* Get A,B Matrix*/
-//   always @ (posedge clk) begin
-//     if(reset)
-//       A_index <= 'd0;
-//     else if(start_compute_flag && cycle_cnt < (K_in - 1))
-//       A_index <= A_index + 'd4;
-//     else if (cmd_payload_function_id[2:0] == 'd3 && cmd_valid) //(check)
-//       A_index <= 'd0;
-//   end
-
-//   always @(posedge clk) begin
-//     if (reset)
-//       B_index <= 'd0;
-//     else if (start_compute_flag && cycle_cnt < (K_in -1))
-//       B_index <= B_index + 'd4;
-//     else if (cmd_payload_function_id[2:0] == 'd3 && cmd_valid) // Only after three times computation reset to zero
-//       B_index <= 'd0;
-//   end
-
-//   /* PEs Calculate */
-//   integer c;
-//   reg signed [31:0] pipeline_buffer[0:15];
-
-//   // Pipeline for multiply
-//   reg signed [31:0] tmp_gbuff_A_0, tmp_gbuff_A_1, tmp_gbuff_A_2, tmp_gbuff_A_3;
-//   reg signed [7:0] tmp_gbuff_B_0, tmp_gbuff_B_1, tmp_gbuff_B_2, tmp_gbuff_B_3;
-
-//   always @(posedge clk) begin
-//     if (reset) begin
-//       tmp_gbuff_A_0 <= 'd0;
-//       tmp_gbuff_A_1 <= 'd0;
-//       tmp_gbuff_A_2 <= 'd0;
-//       tmp_gbuff_A_3 <= 'd0;
-//     end
-//     else begin
-//       if (gbuff_offset_map[A_index] == 1'b1) begin
-//         tmp_gbuff_A_0 <= gbuff_A[A_index] + input_offset;
-//       end
-//       else begin
-//         tmp_gbuff_A_0 <= gbuff_A[A_index];
-//       end
-
-//       if (gbuff_offset_map[A_index + 1] == 1'b1) begin
-//         tmp_gbuff_A_1 <= gbuff_A[A_index + 1] + input_offset;
-//       end
-//       else begin
-//         tmp_gbuff_A_1 <= gbuff_A[A_index + 1];
-//       end
-
-//       if (gbuff_offset_map[A_index +2] == 1'b1) begin
-//         tmp_gbuff_A_2 <= gbuff_A[A_index + 2] + input_offset;
-//       end
-//       else begin
-//         tmp_gbuff_A_2 <= gbuff_A[A_index + 2];
-//       end
-
-//       if (gbuff_offset_map[A_index + 3] == 1'b1) begin
-//         tmp_gbuff_A_3 <= gbuff_A[A_index + 3] + input_offset;
-//       end
-//       else begin
-//         tmp_gbuff_A_3 <= gbuff_A[A_index + 3];
-//       end
-
-//     end
-//   end
-//   always @(posedge clk) begin
-//     if (reset) begin
-//       tmp_gbuff_B_0 <= 'd0;
-//       tmp_gbuff_B_1 <= 'd0;
-//       tmp_gbuff_B_2 <= 'd0;
-//       tmp_gbuff_B_3 <= 'd0;
-//     end
-//     else begin
-//       tmp_gbuff_B_0 <= gbuff_B[B_index];
-//       tmp_gbuff_B_1 <= gbuff_B[B_index + 1];
-//       tmp_gbuff_B_2 <= gbuff_B[B_index + 2];
-//       tmp_gbuff_B_3 <= gbuff_B[B_index + 3];
-//     end
-//   end
-
-//   always @(posedge clk) begin
-//     if (reset) begin
-//       for (c = 0; c < 16; c = c+1)
-//         pipeline_buffer[c] <= 'd0;
-//     end
-//     // else if (cycle_cnt >= 1 && cycle_cnt <= K_in) begin
-//     else if (cycle_cnt >= 1 && cycle_cnt <= K_in) begin //Add one cycle
-//       pipeline_buffer[0]  <= tmp_gbuff_A_0 * tmp_gbuff_B_0;
-//       pipeline_buffer[1]  <= tmp_gbuff_A_0 * tmp_gbuff_B_1;
-//       pipeline_buffer[2]  <= tmp_gbuff_A_0 * tmp_gbuff_B_2;
-//       pipeline_buffer[3]  <= tmp_gbuff_A_0 * tmp_gbuff_B_3;
-//       pipeline_buffer[4]  <= tmp_gbuff_A_1 * tmp_gbuff_B_0;
-//       pipeline_buffer[5]  <= tmp_gbuff_A_1 * tmp_gbuff_B_1;
-//       pipeline_buffer[6]  <= tmp_gbuff_A_1 * tmp_gbuff_B_2;
-//       pipeline_buffer[7]  <= tmp_gbuff_A_1 * tmp_gbuff_B_3;
-//       pipeline_buffer[8]  <= tmp_gbuff_A_2 * tmp_gbuff_B_0;
-//       pipeline_buffer[9]  <= tmp_gbuff_A_2 * tmp_gbuff_B_1;
-//       pipeline_buffer[10] <= tmp_gbuff_A_2 * tmp_gbuff_B_2;
-//       pipeline_buffer[11] <= tmp_gbuff_A_2 * tmp_gbuff_B_3;
-//       pipeline_buffer[12] <= tmp_gbuff_A_3 * tmp_gbuff_B_0;
-//       pipeline_buffer[13] <= tmp_gbuff_A_3 * tmp_gbuff_B_1;
-//       pipeline_buffer[14] <= tmp_gbuff_A_3 * tmp_gbuff_B_2;
-//       pipeline_buffer[15] <= tmp_gbuff_A_3 * tmp_gbuff_B_3;
-//     end
-//     else if ((cmd_payload_function_id[2:0] == 'd0 || cmd_payload_function_id[2:0] == 'd1) && cmd_valid) begin  //Wrong (check)
-//       for (c = 0; c < 16; c = c+1)
-//         pipeline_buffer[c] <= 'd0;
-//     end
-//   end
-
-//   always @(posedge clk) begin
-//     if (reset) begin
-//       for (c = 0; c < 16; c = c+1)
-//         C_Matrix[c] <= 'd0;
-//     end
-//     // else if (cycle_cnt >= 1+1 && cycle_cnt <= K_in + 1) begin // cycle + 1
-//     else if (cycle_cnt >= 1+1 && cycle_cnt <= K_in + 1) begin // cycle + 1 + 1
-//       C_Matrix[0]  <= C_Matrix[0]  + pipeline_buffer[0];
-//       C_Matrix[1]  <= C_Matrix[1]  + pipeline_buffer[1];
-//       C_Matrix[2]  <= C_Matrix[2]  + pipeline_buffer[2];
-//       C_Matrix[3]  <= C_Matrix[3]  + pipeline_buffer[3];
-//       C_Matrix[4]  <= C_Matrix[4]  + pipeline_buffer[4];
-//       C_Matrix[5]  <= C_Matrix[5]  + pipeline_buffer[5];
-//       C_Matrix[6]  <= C_Matrix[6]  + pipeline_buffer[6];
-//       C_Matrix[7]  <= C_Matrix[7]  + pipeline_buffer[7];
-//       C_Matrix[8]  <= C_Matrix[8]  + pipeline_buffer[8];
-//       C_Matrix[9]  <= C_Matrix[9]  + pipeline_buffer[9];
-//       C_Matrix[10] <= C_Matrix[10] + pipeline_buffer[10];
-//       C_Matrix[11] <= C_Matrix[11] + pipeline_buffer[11];
-//       C_Matrix[12] <= C_Matrix[12] + pipeline_buffer[12];
-//       C_Matrix[13] <= C_Matrix[13] + pipeline_buffer[13];
-//       C_Matrix[14] <= C_Matrix[14] + pipeline_buffer[14];
-//       C_Matrix[15] <= C_Matrix[15] + pipeline_buffer[15];
-//     end
-//     else if ((cmd_payload_function_id[2:0] == 'd0 || cmd_payload_function_id[2:0] == 'd1) && cmd_valid) begin  //Wrong (check) would be reset to zero
-//       for (c = 0; c < 16; c = c+1)
-//         C_Matrix[c] <= 'd0;
-//     end
-//   end
-
-
-//   /* TPU end */
-
-
-
-
-// endmodule
+endmodule

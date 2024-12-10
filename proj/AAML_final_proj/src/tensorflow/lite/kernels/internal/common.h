@@ -25,6 +25,10 @@ limitations under the License.
 #include <cmath>
 #include <functional>
 
+#include <stdint.h>
+#include <stdio.h>
+#include "cfu.h"
+
 #include "fixedpoint/fixedpoint.h"
 #include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/optimized/neon_check.h"
@@ -258,7 +262,12 @@ inline int32_t MultiplyByQuantizedMultiplierSmallerThanOneExp(
   // using gemmlowp::SaturatingRoundingDoublingHighMul;
   // return RoundingDivideByPOT(
   //     SaturatingRoundingDoublingHighMul(x, quantized_multiplier), -left_shift);
+  
   return RDBPOT(SRDHM(x, quantized_multiplier), -left_shift);
+  // cfu_op0(10, x, quantized_multiplier);
+  // while(cfu_op0(11, 0, 0)){}
+
+  // return RDBPOT(cfu_op0(12, 0, 0), -left_shift);
 }
 
 inline int32_t MultiplyByQuantizedMultiplierGreaterThanOne(
@@ -280,7 +289,16 @@ inline int32_t MultiplyByQuantizedMultiplier(int32_t x,
   //                            right_shift);
   int left_shift = shift > 0 ? shift : 0;
   int right_shift = shift > 0 ? 0 : -shift;
-  return RDBPOT(SRDHM(x * (1 << left_shift), quantized_multiplier),
+  // int32_t srdhm = SRDHM(x * (1 << left_shift), quantized_multiplier);
+  // printf("correct srdhm = %02ld\n", srdhm);
+
+  // cfu_op0(10, x * (1 << left_shift), quantized_multiplier);
+  // while(cfu_op0(11, 0, 0)){}
+  // // int32_t srdhm_cfu = cfu_op0(12, 0, 0);
+  // // printf("my srdhm = %02ld\n", srdhm_cfu);
+
+  // return RDBPOT(cfu_op0(12, 0, 0), right_shift);
+   return RDBPOT(SRDHM(x * (1 << left_shift), quantized_multiplier),
                 right_shift);
 }
 
