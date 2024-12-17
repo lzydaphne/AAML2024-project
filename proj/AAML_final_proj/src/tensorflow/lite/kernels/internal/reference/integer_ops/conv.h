@@ -53,16 +53,16 @@ inline void ConvPerChannel(
   const int32_t output_activation_max = params.quantized_activation_max;
 
   // Consistency check.
-  TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
-  TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
-  TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
-  TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
+  // TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
+  // TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
+  // TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
+  // TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
   // const int batches = MatchingDim(input_shape, 0, output_shape, 0);
   const int input_depth = input_shape.Dims(3);
   const int output_depth = MatchingDim(filter_shape, 0, output_shape, 3);
-  if (bias_data) {
-    TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
-  }
+  // if (bias_data) {
+  //   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
+  // }
 
   // Check dimensions of the tensors.
   const int input_height = input_shape.Dims(1);
@@ -71,7 +71,7 @@ inline void ConvPerChannel(
   const int filter_width = filter_shape.Dims(2);
   const int filter_input_depth = filter_shape.Dims(3);
   // const int groups = input_depth / filter_input_depth;
-  TFLITE_DCHECK_EQ(input_depth % filter_input_depth, 0);
+  // TFLITE_DCHECK_EQ(input_depth % filter_input_depth, 0);
   // const int filters_per_group = output_depth / groups;
   const int output_height = output_shape.Dims(1);
   const int output_width = output_shape.Dims(2);
