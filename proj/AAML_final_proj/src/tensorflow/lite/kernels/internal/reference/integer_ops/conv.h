@@ -166,69 +166,124 @@ inline void ConvPerChannel(
       }
   }
 
-  // // printf("height= %d, output_depth = %d, offset=%ld\n", output_height * output_width, output_depth, input_offset);
+  //start
+  for (int kernel_y = 0; kernel_y < width; kernel_y += T){
+    const int kk = kernel_y + T < width ? T : width - kernel_y;
+    const int KK = kernel_y + kk;
+    for (int kernel_x = 0; kernel_x < output_depth; kernel_x += T){
+      const int nn = kernel_x + T < output_depth ? T : output_depth - kernel_x;
+      const int NN = kernel_x + nn;
+      int idx = 0;
+      int8_t recon[4];
+      for (int xx = kernel_x; xx < NN; xx+=4){
+        for (int yy = kernel_y; yy < KK; yy++){
+          recon[3] = ( yy < width && xx < output_depth ) ? kernel[yy][xx] : 0;
+          recon[2] = ( yy < width && xx+1 < output_depth ) ? kernel[yy][xx+1] : 0;
+          recon[1] = ( yy < width && xx+2 < output_depth ) ? kernel[yy][xx+2] : 0;
+          recon[0] = ( yy < width && xx+3 < output_depth ) ? kernel[yy][xx+3] : 0;
+          cfu_op0(2, idx, *(int32_t*)recon);
+          idx++;
+        }
+      }
 
-  for (int m = 0; m < output_img; m += T) {
-    for (int n = 0; n < output_depth; n += T) {
-      for (int k = 0; k < width; k += T) {
-        // send to im2col buffer
-        int idx = 0;
-        int8_t recon[4];
-        const int mm = m + T < output_img ? T : output_img - m;
-        const int nn = n + T < output_depth ? T : output_depth - n;
-        const int kk = k + T < width ? T : width - k;
-        const int MM = m + mm;
-        const int NN = n + nn;
-        const int KK = k + kk;
-        // printf("tiling:\n");
-        for (int yy = m; yy < MM; yy+=4) {
-          for (int xx = k; xx < KK; xx++) {
+      for (int img_y = 0; img_y < output_img; img_y += T){
+        const int mm = img_y + T < output_img ? T : output_img - img_y;
+        const int MM = img_y + mm;
+
+        idx = 0;
+        for (int yy = img_y; yy < MM; yy+=4) {
+          for (int xx = kernel_y; xx < KK; xx++) {
             recon[3] = ( yy < output_img && xx < width ) ? im2col[yy][xx] : -(int8_t)input_offset;
             recon[2] = ( yy+1 < output_img && xx < width ) ? im2col[yy+1][xx] : -(int8_t)input_offset;
             recon[1] = ( yy+2 < output_img && xx < width ) ? im2col[yy+2][xx] : -(int8_t)input_offset;
             recon[0] = ( yy+3 < output_img && xx < width ) ? im2col[yy+3][xx] : -(int8_t)input_offset;
             cfu_op0(1, idx, *(int32_t*)recon);
             idx++;
-            // printf("%lx ",  *(int32_t*)recon);
           }
-          // printf("\n");
-        }
-
-        // send to kernel buffer
-        // printf("tiling:\n");
-        idx = 0;
-        for (int xx = n; xx < NN; xx+=4){
-          for (int yy = k; yy < KK; yy++){
-            recon[3] = ( yy < width && xx < output_depth ) ? kernel[yy][xx] : 0;
-            recon[2] = ( yy < width && xx+1 < output_depth ) ? kernel[yy][xx+1] : 0;
-            recon[1] = ( yy < width && xx+2 < output_depth ) ? kernel[yy][xx+2] : 0;
-            recon[0] = ( yy < width && xx+3 < output_depth ) ? kernel[yy][xx+3] : 0;
-            cfu_op0(2, idx, *(int32_t*)recon);
-            idx++;
-            // printf("%lx ",  *(int32_t*)recon);
-          }
-          // printf("\n");
         }
 
         cfu_op0(5, kk, (nn << 8) + mm );
         cfu_op0(4, 0, input_offset);
         while(cfu_op0(6, 0, 0)) {}
 
-        // receive from output buffer
-        for (int yy = m; yy < MM; yy++){
-          for (int xx = n; xx < NN; xx+=4)
+        for (int yy = img_y; yy < MM; yy++){
+          for (int xx = kernel_x; xx < NN; xx+=4)
             {
-              int temp = yy - m + ((xx - n) >> 2) * mm;
+              int temp = yy - img_y + ((xx - kernel_x) >> 2) * mm;
               result_cfu[yy][xx] += cfu_op0(9, temp, 0);
               result_cfu[yy][xx+1] += cfu_op0(8, temp, 0);
               result_cfu[yy][xx+2] += cfu_op0(7, temp, 0);
               result_cfu[yy][xx+3] += cfu_op0(3, temp, 0);
             }
         }
-
       }
     }
   }
+  //end
+
+  // // printf("height= %d, output_depth = %d, offset=%ld\n", output_height * output_width, output_depth, input_offset);
+
+  // for (int m = 0; m < output_img; m += T) {
+  //   for (int n = 0; n < output_depth; n += T) {
+  //     for (int k = 0; k < width; k += T) {
+  //       // send to im2col buffer
+  //       int idx = 0;
+  //       int8_t recon[4];
+  //       const int mm = m + T < output_img ? T : output_img - m;
+  //       const int nn = n + T < output_depth ? T : output_depth - n;
+  //       const int kk = k + T < width ? T : width - k;
+  //       const int MM = m + mm;
+  //       const int NN = n + nn;
+  //       const int KK = k + kk;
+  //       // printf("tiling:\n");
+  //       for (int yy = m; yy < MM; yy+=4) {
+  //         for (int xx = k; xx < KK; xx++) {
+  //           recon[3] = ( yy < output_img && xx < width ) ? im2col[yy][xx] : -(int8_t)input_offset;
+  //           recon[2] = ( yy+1 < output_img && xx < width ) ? im2col[yy+1][xx] : -(int8_t)input_offset;
+  //           recon[1] = ( yy+2 < output_img && xx < width ) ? im2col[yy+2][xx] : -(int8_t)input_offset;
+  //           recon[0] = ( yy+3 < output_img && xx < width ) ? im2col[yy+3][xx] : -(int8_t)input_offset;
+  //           cfu_op0(1, idx, *(int32_t*)recon);
+  //           idx++;
+  //           // printf("%lx ",  *(int32_t*)recon);
+  //         }
+  //         // printf("\n");
+  //       }
+
+  //       // send to kernel buffer
+  //       // printf("tiling:\n");
+  //       idx = 0;
+  //       for (int xx = n; xx < NN; xx+=4){
+  //         for (int yy = k; yy < KK; yy++){
+  //           recon[3] = ( yy < width && xx < output_depth ) ? kernel[yy][xx] : 0;
+  //           recon[2] = ( yy < width && xx+1 < output_depth ) ? kernel[yy][xx+1] : 0;
+  //           recon[1] = ( yy < width && xx+2 < output_depth ) ? kernel[yy][xx+2] : 0;
+  //           recon[0] = ( yy < width && xx+3 < output_depth ) ? kernel[yy][xx+3] : 0;
+  //           cfu_op0(2, idx, *(int32_t*)recon);
+  //           idx++;
+  //           // printf("%lx ",  *(int32_t*)recon);
+  //         }
+  //         // printf("\n");
+  //       }
+
+  //       cfu_op0(5, kk, (nn << 8) + mm );
+  //       cfu_op0(4, 0, input_offset);
+  //       while(cfu_op0(6, 0, 0)) {}
+
+  //       // receive from output buffer
+  //       for (int yy = m; yy < MM; yy++){
+  //         for (int xx = n; xx < NN; xx+=4)
+  //           {
+  //             int temp = yy - m + ((xx - n) >> 2) * mm;
+  //             result_cfu[yy][xx] += cfu_op0(9, temp, 0);
+  //             result_cfu[yy][xx+1] += cfu_op0(8, temp, 0);
+  //             result_cfu[yy][xx+2] += cfu_op0(7, temp, 0);
+  //             result_cfu[yy][xx+3] += cfu_op0(3, temp, 0);
+  //           }
+  //       }
+
+  //     }
+  //   }
+  // }
   // perf_disable_counter(6);
 
     // perf_enable_counter(6);

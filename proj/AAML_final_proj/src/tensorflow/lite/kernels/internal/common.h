@@ -280,29 +280,13 @@ inline int32_t MultiplyByQuantizedMultiplierGreaterThanOne(
 inline int32_t MultiplyByQuantizedMultiplier(int32_t x,
                                              int32_t quantized_multiplier,
                                              int shift) {
-  // using gemmlowp::RoundingDivideByPOT;
-  // using gemmlowp::SaturatingRoundingDoublingHighMul;
-  // int left_shift = shift > 0 ? shift : 0;
-  // int right_shift = shift > 0 ? 0 : -shift;
-  // return RoundingDivideByPOT(SaturatingRoundingDoublingHighMul(
-  //                                x * (1 << left_shift), quantized_multiplier),
-  //                            right_shift);
   int left_shift = shift > 0 ? shift : 0;
   int right_shift = shift > 0 ? 0 : -shift;
-  // int32_t srdhm = SRDHM(x * (1 << left_shift), quantized_multiplier);
-  // printf("correct srdhm = %02ld\n", srdhm);
 
   cfu_op0(10, x * (1 << left_shift), quantized_multiplier);
   while(cfu_op0(11, 0, 0)){}
-  // int32_t srdhm_cfu = cfu_op0(12, 0, 0);
-  // printf("my srdhm = %02ld\n", srdhm_cfu);
-  // cfu_op0(13, srdhm_cfu, right_shift);
-  // while(cfu_op0(14, 0, 0)){}
-  // return cfu_op0(15, 0, 0);
 
   return RDBPOT(cfu_op0(12, 0, 0), right_shift);
-  //  return RDBPOT(SRDHM(x * (1 << left_shift), quantized_multiplier),
-                // right_shift);
 }
 
 inline int32_t MultiplyByQuantizedMultiplier(int64_t x,
