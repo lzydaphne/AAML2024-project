@@ -5,7 +5,7 @@ module TPU #(
   parameter OUTPUT_DATA_WIDTH = 32,
   parameter SYS_ARRAY_SIZE    = 4,
   parameter PARAMS_WIDTH      = 8,
-  parameter SRAM_INDEX_WIDTH  = 16
+  parameter SRAM_INDEX_WIDTH  = 12
 )(
   input          clk,
   input          rst_n,

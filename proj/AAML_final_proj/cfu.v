@@ -51,7 +51,13 @@ module Cfu (
   reg signed [31:0] InputOffset; //state
   reg signed [31:0] FilterOffset; //state
   // reg signed [31:0] acc; // state
-  
+
+  // reg [31:0] input1_offset, input2_offset;
+  // reg [7:0]  input_x, input_y;
+
+  // wire [31:0] shifted_input1_val = ($signed(input1_offset) + $signed(input_x)) * $signed(1 << 20);
+  // wire [31:0] shifted_input2_val = ($signed(input2_offset) + $signed(input_y))* $signed(1 << 20);
+  // wire [31:0] 
 
   // SIMD multiply step:
   wire signed [15:0] prod_0, prod_1, prod_2, prod_3;
@@ -90,22 +96,22 @@ module Cfu (
 
 
 
-  wire [11:0]    A_index        = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0} )) ? cmd_payload_inputs_0[11:0]
+  wire [13:0]    A_index        = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0} )) ? cmd_payload_inputs_0[13:0]
                                                                                                            : A_index_TPU;        
   wire [31:0]    A_data_in      = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0})) ? cmd_payload_inputs_1 : 32'd0;    
   wire           A_wr_en        = (cmd_valid && (cmd_payload_function_id == {7'd1, 3'd0})) ? 1 : 0;     
   wire [31:0]    A_data_out; 
 
-  wire [11:0]     B_index       = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? cmd_payload_inputs_0[11:0]
+  wire [13:0]     B_index       = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? cmd_payload_inputs_0[13:0]
                                                                                                            : B_index_TPU;
   wire [31:0]     B_data_in     = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? cmd_payload_inputs_1 : 32'd0;  
   wire            B_wr_en       = (cmd_valid && (cmd_payload_function_id == {7'd2, 3'd0})) ? 1 : 0;      
   wire [31:0]    B_data_out;  
 
-  wire [11:0]     C_index       = (cmd_valid &&  ( (cmd_payload_function_id == {7'd3, 3'd0}) 
+  wire [13:0]     C_index       = (cmd_valid &&  ( (cmd_payload_function_id == {7'd3, 3'd0}) 
                                                 || (cmd_payload_function_id == {7'd7, 3'd0})
                                                 || (cmd_payload_function_id == {7'd8, 3'd0})
-                                                || (cmd_payload_function_id == {7'd9, 3'd0}))) ? cmd_payload_inputs_0[11:0]
+                                                || (cmd_payload_function_id == {7'd9, 3'd0}))) ? cmd_payload_inputs_0[13:0]
                                                                                      : C_index_TPU;      
   wire [127:0]   C_data_in      = C_data_in_TPU;  
   wire           C_wr_en        = C_wr_en_TPU;   
@@ -250,9 +256,9 @@ module Cfu (
 //     .C_data_out     (C_data_out_TPU)         
 //   );
 
-    wire [11:0]    A_index_TPU; 
-    wire [11:0]    B_index_TPU; 
-    wire [11:0]    C_index_TPU; 
+    wire [13:0]    A_index_TPU; 
+    wire [13:0]    B_index_TPU; 
+    wire [13:0]    C_index_TPU; 
 
     wire [127:0]    C_data_in_TPU; 
 
@@ -281,7 +287,7 @@ module Cfu (
 
 
   global_buffer_bram #(
-      .ADDR_BITS(12),
+      .ADDR_BITS(14),
       .DATA_BITS(32)
   )
   gbuff_A(
@@ -295,7 +301,7 @@ module Cfu (
   );
 
   global_buffer_bram #(
-      .ADDR_BITS(12),
+      .ADDR_BITS(14),
       .DATA_BITS(32)
   ) gbuff_B(
       .clk(clk),
@@ -309,7 +315,7 @@ module Cfu (
 
 
   global_buffer_bram #(
-      .ADDR_BITS(12),
+      .ADDR_BITS(14),
       .DATA_BITS(128)
   ) gbuff_C(
       .clk(clk),

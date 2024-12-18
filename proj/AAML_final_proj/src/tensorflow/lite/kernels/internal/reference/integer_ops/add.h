@@ -78,6 +78,7 @@ inline void BroadcastBinaryFunction4DSlow(
   // We name our variables by their Tensorflow convention, but generate C code
   // nesting loops such that the innermost loop has the smallest stride for the
   // best cache behavior.
+  // printf("check use\n");
   for (int b = 0; b < extended_output_shape.Dims(0); ++b) {
     for (int y = 0; y < extended_output_shape.Dims(1); ++y) {
       for (int x = 0; x < extended_output_shape.Dims(2); ++x) {

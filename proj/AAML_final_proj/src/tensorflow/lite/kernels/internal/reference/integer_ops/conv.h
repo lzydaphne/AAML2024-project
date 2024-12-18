@@ -42,15 +42,15 @@ inline void ConvPerChannel(
   const int32_t input_offset = params.input_offset;  // r = s(q - Z)
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
-  const int dilation_width_factor = params.dilation_width_factor;
-  const int dilation_height_factor = params.dilation_height_factor;
+  // const int dilation_width_factor = params.dilation_width_factor;
+  // const int dilation_height_factor = params.dilation_height_factor;
   const int pad_width = params.padding_values.width;
   const int pad_height = params.padding_values.height;
   const int32_t output_offset = params.output_offset;
 
   // Set min and max value of the output.
-  const int32_t output_activation_min = params.quantized_activation_min;
-  const int32_t output_activation_max = params.quantized_activation_max;
+  // const int32_t output_activation_min = params.quantized_activation_min;
+  // const int32_t output_activation_max = params.quantized_activation_max;
 
   // Consistency check.
   // TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
@@ -81,37 +81,44 @@ inline void ConvPerChannel(
   int8_t im2col[2048][2048];
   int8_t kernel[2048][2048];
 
-    for (int out_y = 0; out_y < output_height; ++out_y) {
-      const int in_y_origin = (out_y * stride_height) - pad_height;
-      for (int out_x = 0; out_x < output_width; ++out_x) {
-        const int in_x_origin = (out_x * stride_width) - pad_width;
-        const int idx_y = out_y * output_width + out_x;
-        for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
-          const int in_y = in_y_origin + dilation_height_factor * filter_y;
-          for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
-            const int in_x = in_x_origin + dilation_width_factor * filter_x;
+   const int img_off = filter_height * filter_width;
+  for (int out_y = 0; out_y < output_height; ++out_y) {
+    const int in_y_origin = (out_y * stride_height) - pad_height;
+    for (int out_x = 0; out_x < output_width; ++out_x) {
+      const int in_x_origin = (out_x * stride_width) - pad_width;
+      const int idx_y = out_y * output_width + out_x;
+      for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
+        // const int in_y = in_y_origin + dilation_height_factor * filter_y;
+        const int in_y = in_y_origin + filter_y;
+        const int off_y = filter_y * filter_width;
+        for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
+          // const int in_x = in_x_origin + dilation_width_factor * filter_x;
+          const int in_x = in_x_origin + filter_x;
 
-            // Zero padding by omitting the areas outside the image.
-            const bool is_point_inside_image =
-                (in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
-                (in_y < input_height);
+          // Zero padding by omitting the areas outside the image.
+          // const bool is_point_inside_image =
+          //     (in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
+          //     (in_y < input_height);
+          const bool is_point_inside_image =
+              ((uint32_t)in_x < (uint32_t)input_width)&&
+              ((uint32_t)in_y < (uint32_t)input_height);
 
-            for (int in_channel = 0; in_channel < filter_input_depth;
-                ++in_channel) {
-                int idx = in_channel * filter_height * filter_width + filter_y * filter_width + filter_x;
-                if (!is_point_inside_image) {
-                  im2col [idx_y][idx] = -input_offset;
-                }
-                else{
-                  im2col [idx_y][idx] =
-                      input_data[Offset(input_shape, 0, in_y, in_x,
-                                        in_channel)];
-                }
+          for (int in_channel = 0; in_channel < filter_input_depth;
+              ++in_channel) {
+              int idx = in_channel * img_off + off_y + filter_x;
+              if (!is_point_inside_image) {
+                im2col [idx_y][idx] = -input_offset;
               }
-          }
+              else{
+                im2col [idx_y][idx] =
+                    input_data[Offset(input_shape, 0, in_y, in_x,
+                                      in_channel)];
+              }
+            }
         }
       }
     }
+  }
 
   // printf("im2col: \n");
   // for (int i = 0; i < output_height * output_width; i++){
@@ -122,13 +129,14 @@ inline void ConvPerChannel(
   // }
 
 
-
+  // int img_off = filter_height * filter_width;
   for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
       for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
+          int off_y = filter_y * filter_width;
           for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
             for (int in_channel = 0; in_channel < filter_input_depth;
                     ++in_channel) {
-              int idx = in_channel * filter_height * filter_width + filter_y * filter_width + filter_x;
+              int idx = in_channel * img_off + off_y + filter_x;
               kernel[idx][out_channel] = filter_data[Offset(
                       filter_shape, out_channel, filter_y, filter_x, in_channel)];
               }
@@ -146,12 +154,13 @@ inline void ConvPerChannel(
 
   int32_t result_cfu[2048][2048];
 
-  int width = filter_height * filter_width * input_depth;
+  int width = img_off * input_depth;
   // perf_enable_counter(6);
 
-  constexpr int T = 64; // tile size
+  constexpr int T = 128; // tile size
+  const int output_img = output_height * output_width;
 
-  for  (int y = 0; y < output_height * output_width; y++){
+  for  (int y = 0; y < output_img; y++){
       for (int x = 0; x < output_depth; x++){
         result_cfu[y][x] = 0;
       }
@@ -159,22 +168,25 @@ inline void ConvPerChannel(
 
   // // printf("height= %d, output_depth = %d, offset=%ld\n", output_height * output_width, output_depth, input_offset);
 
-  for (int m = 0; m < output_height * output_width; m += T) {
+  for (int m = 0; m < output_img; m += T) {
     for (int n = 0; n < output_depth; n += T) {
       for (int k = 0; k < width; k += T) {
         // send to im2col buffer
         int idx = 0;
         int8_t recon[4];
-        int mm = m + T < output_height * output_width ? T : output_height * output_width - m;
-        int nn = n + T < output_depth ? T : output_depth - n;
-        int kk = k + T < width ? T : width - k;
+        const int mm = m + T < output_img ? T : output_img - m;
+        const int nn = n + T < output_depth ? T : output_depth - n;
+        const int kk = k + T < width ? T : width - k;
+        const int MM = m + mm;
+        const int NN = n + nn;
+        const int KK = k + kk;
         // printf("tiling:\n");
-        for (int yy = m; yy < m + mm; yy+=4) {
-          for (int xx = k; xx < k + kk; xx++) {
-            recon[3] = ( yy < output_height * output_width && xx < width ) ? im2col[yy][xx] : -(int8_t)input_offset;
-            recon[2] = ( yy+1 < output_height * output_width && xx < width ) ? im2col[yy+1][xx] : -(int8_t)input_offset;
-            recon[1] = ( yy+2 < output_height * output_width && xx < width ) ? im2col[yy+2][xx] : -(int8_t)input_offset;
-            recon[0] = ( yy+3 < output_height * output_width && xx < width ) ? im2col[yy+3][xx] : -(int8_t)input_offset;
+        for (int yy = m; yy < MM; yy+=4) {
+          for (int xx = k; xx < KK; xx++) {
+            recon[3] = ( yy < output_img && xx < width ) ? im2col[yy][xx] : -(int8_t)input_offset;
+            recon[2] = ( yy+1 < output_img && xx < width ) ? im2col[yy+1][xx] : -(int8_t)input_offset;
+            recon[1] = ( yy+2 < output_img && xx < width ) ? im2col[yy+2][xx] : -(int8_t)input_offset;
+            recon[0] = ( yy+3 < output_img && xx < width ) ? im2col[yy+3][xx] : -(int8_t)input_offset;
             cfu_op0(1, idx, *(int32_t*)recon);
             idx++;
             // printf("%lx ",  *(int32_t*)recon);
@@ -185,8 +197,8 @@ inline void ConvPerChannel(
         // send to kernel buffer
         // printf("tiling:\n");
         idx = 0;
-        for (int xx = n; xx < nn + n; xx+=4){
-          for (int yy = k; yy < kk + k; yy++){
+        for (int xx = n; xx < NN; xx+=4){
+          for (int yy = k; yy < KK; yy++){
             recon[3] = ( yy < width && xx < output_depth ) ? kernel[yy][xx] : 0;
             recon[2] = ( yy < width && xx+1 < output_depth ) ? kernel[yy][xx+1] : 0;
             recon[1] = ( yy < width && xx+2 < output_depth ) ? kernel[yy][xx+2] : 0;
@@ -197,19 +209,16 @@ inline void ConvPerChannel(
           }
           // printf("\n");
         }
-        // printf("in1\n");
+
         cfu_op0(5, kk, (nn << 8) + mm );
-        // printf("in2\n");
         cfu_op0(4, 0, input_offset);
-        // printf("in3\n");
         while(cfu_op0(6, 0, 0)) {}
-        // printf("in4\n");
 
         // receive from output buffer
-        for (int yy = m; yy < mm + m; yy++){
-          for (int xx = n; xx < nn + n; xx+=4)
+        for (int yy = m; yy < MM; yy++){
+          for (int xx = n; xx < NN; xx+=4)
             {
-              int temp = yy - m + ((xx - n) / 4) * mm;
+              int temp = yy - m + ((xx - n) >> 2) * mm;
               result_cfu[yy][xx] += cfu_op0(9, temp, 0);
               result_cfu[yy][xx+1] += cfu_op0(8, temp, 0);
               result_cfu[yy][xx+2] += cfu_op0(7, temp, 0);
@@ -220,7 +229,6 @@ inline void ConvPerChannel(
       }
     }
   }
-  // printf("in5\n");
   // perf_disable_counter(6);
 
     // perf_enable_counter(6);
@@ -255,18 +263,17 @@ inline void ConvPerChannel(
 
     for (int out_y = 0; out_y < output_height; ++out_y) {
       for (int out_x = 0; out_x < output_width; ++out_x) {
+        const int re_idx = out_y * output_width + out_x;
         for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
-        int32_t acc = result_cfu[out_y * output_width + out_x][out_channel];
+        int32_t acc = result_cfu[re_idx][out_channel];
         if (bias_data) {
             acc += bias_data[out_channel];
         }
-        // printf("in6\n");
         acc = MultiplyByQuantizedMultiplier(
             acc, output_multiplier[out_channel], output_shift[out_channel]);
-        // printf("in7\n");
         acc += output_offset;
-        acc = std::max(acc, output_activation_min);
-        acc = std::min(acc, output_activation_max);
+        acc = std::max(acc, (int32_t)-128);
+        acc = std::min(acc, (int32_t)127);
         output_data[Offset(output_shape, 0, out_y, out_x, out_channel)] =
             static_cast<int8_t>(acc);
         }
